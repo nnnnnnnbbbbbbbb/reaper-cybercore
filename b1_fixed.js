@@ -911,7 +911,7 @@ function createBotInstance() {
     }
 
     // Server password is supplied through MC_PASSWORD; never hardcode it here.
-    const loginPrompt = /\\/login\\b|please\\s+login|login\\s+required|session\\s+has\\s+been\\s+continued|password/i.test(cleanMsg);
+    const loginPrompt = /\/login\b|please\s+login|login\s+required|session\s+has\s+been\s+continued|password/i.test(cleanMsg);
 
     if (
       !isShiftingServers &&
