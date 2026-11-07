@@ -9,6 +9,7 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
+const MC_PASSWORD = process.env.MC_PASSWORD || '';
 
 const HIGHLIGHTED_PLAYERS = {
   deadly_boxer: {
@@ -909,15 +910,14 @@ function createBotInstance() {
       stopLoops();
     }
 
-    // Optional server login.
-    // Set MC_PASSWORD in your environment if needed.
+    // Server password is supplied through MC_PASSWORD; never hardcode it here.
+    const loginPrompt = /\\/login\\b|please\\s+login|login\\s+required|session\\s+has\\s+been\\s+continued|password/i.test(cleanMsg);
+
     if (
       !isShiftingServers &&
       !loginDispatched &&
-      (
-        cleanMsg.includes('/login') ||
-        cleanMsg.includes('session has been continued')
-      )
+      MC_PASSWORD &&
+      loginPrompt
     ) {
       loginDispatched = true;
 
@@ -925,10 +925,10 @@ function createBotInstance() {
         if (
           bot &&
           bot._client?.state === 'play' &&
-          !isShiftingServers &&
-          process.env.MC_PASSWORD
+          !isShiftingServers
         ) {
-          bot.chat('/login ' + process.env.MC_PASSWORD);
+          bot.chat(`/login ${MC_PASSWORD}`);
+          uiLog('[Login] Login command sent.', 'sys');
         }
       }, 3500);
     }
