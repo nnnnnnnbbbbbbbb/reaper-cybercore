@@ -997,4 +997,32 @@ io.on('connection', (socket) => {
   socket.on('uiCommand', (cmd) => {
     if (
       typeof cmd !== 'string' ||
-      !cmd.trim() ||
+      !cmd.trim() ||      cmd.length > 256
+    ) {
+      return;
+    }
+
+    if (
+      bot &&
+      bot._client?.state === 'play' &&
+      !isShiftingServers
+    ) {
+      bot.chat(cmd.trim());
+    } else {
+      socket.emit('botLog', {
+        text: '[System] Bot is not connected.',
+        type: 'err'
+      });
+    }
+  });
+});
+
+// --------------------------------------------------
+// START SERVER
+// --------------------------------------------------
+
+server.listen(PORT, () => {
+  console.log(`Dashboard running on port ${PORT}`);
+
+  createBotInstance();
+});
