@@ -67,7 +67,7 @@ input{min-width:0;background:#0b111c;border:1px solid #2a3a51;color:white;paddin
 const socket=io();
 const $=id=>document.getElementById(id);
 const consoleDiv=$('console'),botUser=$('botUser'),botPass=$('botPass'),startBtn=$('startBtn'),stopBtn=$('stopBtn'),cmdInput=$('cmdInput'),sendBtn=$('sendBtn');
-function logLine(data){const el=document.createElement('div');el.className='log '+(data.type||'srv');el.textContent=data.text;consoleDiv.appendChild(el);consoleDiv.scrollTop=consoleDiv.scrollHeight}
+function logLine(data){const el=document.createElement('div');el.className='log '+(data.type||'srv');if(Array.isArray(data.segments)){for(const part of data.segments){const span=document.createElement('span');span.className=part.type||'srv';span.textContent=part.text;el.appendChild(span)}}else{el.textContent=data.text}consoleDiv.appendChild(el);consoleDiv.scrollTop=consoleDiv.scrollHeight}
 socket.on('botLog',logLine);
 socket.on('statusShift',(status,activeUser)=>{
   $('statusLabel').className='status-badge status-'+status;
@@ -90,6 +90,19 @@ sendBtn.addEventListener('click',transmit);cmdInput.addEventListener('keydown',e
 </script>
 </body></html>`);
 });
+
+function flattenChatComponent(value) {
+  if (value == null) return '';
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
+  if (Array.isArray(value)) return value.map(flattenChatComponent).join('');
+  if (typeof value === 'object') {
+    let result = typeof value.text === 'string' ? value.text : '';
+    if (Array.isArray(value.extra)) result += value.extra.map(flattenChatComponent).join('');
+    if (Array.isArray(value.with)) result += value.with.map(flattenChatComponent).join('');
+    return result;
+  }
+  return '';
+}
 
 function uiLog(text, type = 'srv') {
   console.log(text);
@@ -210,7 +223,16 @@ function launchBotInstance() {
   });
 
   bot.on('error', err => uiLog(`[Error] ${err.message || err}`, 'err'));
-  bot.on('kicked', reason => uiLog(`[Kicked] ${String(reason)}`, 'err'));
+  bot.on('kicked', reason => {
+    const reasonText = flattenChatComponent(reason);
+    const parts = [
+      { text: '[Kicked] ', type: 'srv' },
+      { text: reasonText || 'The server disconnected the bot.', type: 'err' }
+    ];
+    const plainText = parts.map(part => part.text).join('');
+    console.log(plainText);
+    io.emit('botLog', { text: plainText, segments: parts });
+  });
 
   bot.on('end', reason => {
     uiLog(`[Disconnect] Connection ended: ${String(reason || '')}`, 'err');
