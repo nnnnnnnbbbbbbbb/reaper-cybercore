@@ -997,7 +997,8 @@ function createBotInstance() {
 
   stopLoops();
 
-  bot = mineflayer.createBot(config);
+  const botInstance = mineflayer.createBot(config);
+  bot = botInstance;
 
   bot._client.on('state', (newState) => {
     if (newState === 'configuration') {
@@ -1090,6 +1091,8 @@ function createBotInstance() {
   });
 
   bot.on('end', (reason) => {
+    if (bot !== botInstance) return;
+
     uiLog(
       `[Disconnect] Connection closed: ${String(reason)}`,
       'err'
