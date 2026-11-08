@@ -62,6 +62,13 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;background-ima
 .card{position:relative;width:min(420px,100%);padding:30px;background:linear-gradient(145deg,#0b111b,#080c13);border:1px solid var(--border);border-radius:10px;box-shadow:0 0 35px #00f5ff0a}
 .logo{color:var(--cyan);font-size:12px;letter-spacing:3px;margin-bottom:12px}.title{font-size:22px;letter-spacing:2px;color:#fff;margin:0}.sub{color:var(--muted);font-size:10px;letter-spacing:1.5px;margin:10px 0 26px}
 label{display:block;color:var(--muted);font-size:10px;letter-spacing:1.5px;margin-bottom:8px}input{width:100%;padding:13px;background:#030508;border:1px solid #1b2c40;border-radius:4px;color:var(--cyan);outline:none;font:inherit}input:focus{border-color:var(--cyan)}button{width:100%;margin-top:14px;padding:13px;background:var(--cyan);color:#02070b;border:0;border-radius:4px;font:bold 11px monospace;letter-spacing:1px;cursor:pointer}.error{color:var(--red);font-size:11px;margin:0 0 14px}
+
+.bot-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.bot-control-btn { margin:0; width:auto; min-width:105px; padding:10px 14px; border:1px solid var(--border); border-radius:4px; font:bold 10px monospace; letter-spacing:1px; cursor:pointer; }
+.bot-control-btn.start { background:var(--green); color:#03100a; }
+.bot-control-btn.stop { background:var(--red); color:#160309; }
+.bot-control-btn:disabled { opacity:.45; cursor:not-allowed; }
+@media(max-width:600px) { .bot-controls { width:100%; } .bot-control-btn { flex:1; } }
 </style>
 </head>
 <body><main class="card"><div class="logo">⌘ REAPER // CYBERCORE</div><h1 class="title">ACCESS REQUIRED</h1><div class="sub">MINECRAFT CONTROL INTERFACE</div>
@@ -116,6 +123,7 @@ let isShiftingServers = false;
 let loginDispatched = false;
 let reconnectTimer = null;
 let diagnosticsTimer = null;
+let botManuallyStopped = false;
 
 // --------------------------------------------------
 // CYBERTECH DASHBOARD
@@ -580,6 +588,11 @@ body::before {
       <span class="connection-dot"></span>
       <span id="connection-text">CONNECTING</span>
     </div>
+
+    <div class="bot-controls">
+      <button id="startBotBtn" class="bot-control-btn start" type="button">START BOT</button>
+      <button id="stopBotBtn" class="bot-control-btn stop" type="button">STOP BOT</button>
+    </div>
   </div>
 </header>
 
@@ -717,6 +730,22 @@ const connectionText =
   document.getElementById('connection-text');
 
 let rosterCache = [];
+const startBotBtn = document.getElementById('startBotBtn');
+const stopBotBtn = document.getElementById('stopBotBtn');
+function renderBotControlState(running) {
+  startBotBtn.disabled = running; stopBotBtn.disabled = !running;
+  startBotBtn.innerText = running ? 'BOT RUNNING' : 'START BOT';
+  stopBotBtn.innerText = running ? 'STOP BOT' : 'BOT STOPPED';
+}
+startBotBtn.addEventListener('click', () => socket.emit('botControl', 'start'));
+stopBotBtn.addEventListener('click', () => socket.emit('botControl', 'stop'));
+socket.on('botControlState', state => renderBotControlState(Boolean(state.running)));
+socket.on('botControlResult', result => {
+  if (!result || !result.message) return;
+  const line = document.createElement('div'); line.className = 'log sys';
+  line.innerText = '[' + new Date().toLocaleTimeString() + '] ' + result.message;
+  consoleDiv.appendChild(line); consoleDiv.scrollTop = consoleDiv.scrollHeight;
+});
 
 socket.on('connect', () => {
   connectionStatus.className = 'connection online';
@@ -921,10 +950,37 @@ function startLoops() {
 }
 
 // --------------------------------------------------
-// MINEFLAYER CONNECTION
+// MINEFLAYER CONNECTION / DASHBOARD CONTROL
 // --------------------------------------------------
 
+function publishBotControlState() {
+  io.emit('botControlState', { running: !botManuallyStopped && Boolean(bot) });
+}
+
+function stopBotFromDashboard() {
+  botManuallyStopped = true;
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  stopLoops(); isFullyLoaded = false; isShiftingServers = false;
+  io.emit('updatePlayerList', []);
+  const currentBot = bot;
+  if (currentBot) {
+    try { currentBot.quit('Stopped from dashboard'); }
+    catch (err) { try { currentBot._client?.end('Stopped from dashboard'); } catch (_) {} }
+  }
+  bot = null;
+  publishBotControlState();
+  uiLog('[System] Bot stopped from dashboard.', 'sys');
+}
+
+function startBotFromDashboard() {
+  if (bot && !botManuallyStopped) { publishBotControlState(); return; }
+  botManuallyStopped = false;
+  createBotInstance(); publishBotControlState();
+  uiLog('[System] Start requested from dashboard.', 'sys');
+}
+
 function createBotInstance() {
+  if (botManuallyStopped) return;
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
@@ -1046,12 +1102,11 @@ function createBotInstance() {
 
     stopLoops();
 
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer);
-    }
-
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    publishBotControlState();
+    if (botManuallyStopped) return;
     reconnectTimer = setTimeout(() => {
-      createBotInstance();
+      if (!botManuallyStopped) createBotInstance();
     }, 15000);
   });
 }
@@ -1071,6 +1126,14 @@ io.use((socket, next) => {
 
 io.on('connection', (socket) => {
   uiLog('[Dashboard] Web client connected.', 'sys');
+  socket.emit('botControlState', { running: !botManuallyStopped && Boolean(bot) });
+  socket.on('botControl', action => {
+    if (action === 'start') {
+      startBotFromDashboard(); socket.emit('botControlResult', { message: 'Start command accepted.' });
+    } else if (action === 'stop') {
+      stopBotFromDashboard(); socket.emit('botControlResult', { message: 'Stop command accepted.' });
+    }
+  });
 
   if (isFullyLoaded && bot) {
     broadcastLivePlayers();
@@ -1111,5 +1174,7 @@ server.listen(PORT, () => {
   console.log(' Login:   Open the URL and enter your password');
   console.log('==============================================');
 
+  botManuallyStopped = false;
   createBotInstance();
+  publishBotControlState();
 });
