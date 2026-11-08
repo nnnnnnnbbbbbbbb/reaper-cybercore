@@ -53,8 +53,8 @@ input{min-width:0;background:#0b111c;border:1px solid #2a3a51;color:white;paddin
 </header>
 <section class="control">
   <div id="credentialConfigArea" class="fields">
-    <div class="group"><label for="botUser">Bot Username</label><input id="botUser" type="text" placeholder="deadly_boxer" value="deadly_boxer" autocomplete="username"></div>
-    <div class="group"><label for="botPass">Bot Password</label><input id="botPass" type="password" placeholder="Server /login password" autocomplete="current-password"></div>
+    <div class="group"><label for="botUser">Bot Username</label><input id="botUser" type="text" placeholder="Enter username" autocomplete="username"></div>
+    <div class="group"><label for="botPass">Bot Password</label><input id="botPass" type="password" placeholder="Enter password" autocomplete="current-password"></div>
   </div>
   <div id="activeProfileDisplay" class="profile" style="display:none">
     <div id="profileLetter" class="avatar">D</div><div>Active Bot Account: <strong id="profileNameString" style="color:var(--blue)"></strong></div>
