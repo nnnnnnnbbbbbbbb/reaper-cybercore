@@ -429,7 +429,7 @@ app.get('/', (_req, res) => {
           <label for="botUser">Bot Username</label>
           <input id="botUser" type="text" autocomplete="username" placeholder="Minecraft username">
           <label for="botPass">Server Password</label>
-          <input id="botPass" type="password" autocomplete="current-password" placeholder="Enter server password">
+          <input id="botPass" name="sessionKeyEntry" type="text" autocomplete="new-password" autocapitalize="off" spellcheck="false" placeholder="Enter server password">
           <button id="startBtn" class="btn btn-start">Establish Connection</button>
         </div>
 
@@ -486,6 +486,9 @@ app.get('/', (_req, res) => {
     const valHP = document.getElementById('valHP');
     const valFood = document.getElementById('valFood');
     const valXYZ = document.getElementById('valXYZ');
+
+    // Prevent browser-restored credentials from appearing in this field.
+    window.addEventListener('pageshow', () => { botPass.value = ''; });
 
     socket.on('botLog', (data) => {
       const logLine = document.createElement('div');
