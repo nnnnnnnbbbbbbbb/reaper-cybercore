@@ -16,6 +16,10 @@ const {
 // CONFIGURATION
 // =====================================================
 
+// Set your Minecraft password in this constant on your own machine.
+// Do not put a real password in a public GitHub repository.
+const LOGIN_PASSWORD = 'YOUR_PASSWORD_HERE';
+
 const CONFIG = {
     host: '8b8t.me',
     port: 25565,
@@ -33,9 +37,7 @@ const CONFIG = {
     searchDistance: 64,
     interactionDistance: 3,
 
-    // Set MC_LOGIN_COMMAND in your shell, e.g. /login your-password
-    // The credential is not stored in this source file.
-    loginCommand: process.env.MC_LOGIN_COMMAND || '',
+    loginCommand: `/login ${LOGIN_PASSWORD}`,
 
     reconnectDelay: 15000,
     windowTimeout: 7000,
@@ -867,7 +869,7 @@ function createBotInstance() {
 
             if (!CONFIG.loginCommand) {
                 uiLog(
-                    '[LOGIN] Login prompt detected, but MC_LOGIN_COMMAND is not set.',
+                    '[LOGIN] Set LOGIN_PASSWORD in the configuration before running.',
                     'err'
                 );
                 return;
