@@ -40,7 +40,9 @@ const CONFIG = {
     loginCommand: `/login ${LOGIN_PASSWORD}`,
 
     reconnectDelay: 15000,
-    windowTimeout: 7000,
+    windowTimeout: 12000,
+    interactionAttempts: 3,
+    interactionRetryDelay: 1500,
     maxConsoleLines: 500
 };
 
@@ -376,69 +378,145 @@ async function openDonkeyChest(donkey, id) {
         donkey.position
     );
 
-    if (currentDistance > 4) {
+    if (currentDistance > CONFIG.interactionDistance + 1) {
         throw new Error('Move closer to donkey first');
     }
 
-    uiLog('[CHEST] Preparing sneak interaction...', 'sys');
+    uiLog('[CHEST] Preparing donkey inventory interaction...', 'sys');
 
-    const waiter = waitForWindowOpen(id);
+    let lastError = null;
 
-    try {
-        bot.setControlState('sneak', true);
-
-        await sleep(300);
-
+    for (let attempt = 1; attempt <= CONFIG.interactionAttempts; attempt++) {
         assertTask(id);
 
-        uiLog('[CHEST] Sneak enabled. Right-clicking donkey...', 'sys');
-
-        // Right-click the donkey while sneaking.
-        // This avoids mounting it.
-
-        await bot.activateEntity(donkey);
-
-        assertTask(id);
-
-        const window = await waiter.promise;
-
-        assertTask(id);
-
-        if (!window || !Array.isArray(window.slots)) {
-            throw new Error('Invalid inventory window');
+        if (!bot.entities[donkey.id]) {
+            throw new Error('Donkey disappeared before interaction');
         }
 
-        activeWindow = window;
+        uiLog(
+            `[CHEST] Interaction attempt ${attempt}/${CONFIG.interactionAttempts}`,
+            'sys'
+        );
 
-        const containerSlots =
-            Number.isInteger(window.inventoryStart)
-                ? window.inventoryStart
-                : window.slots.length - 36;
+        try {
+            // Keep sneak held for the entire interaction attempt.
+            // openEntity is Mineflayer's inventory-entity API; activateEntity
+            // is only a generic entity interaction and does not return a window.
+            bot.setControlState('sneak', true);
+            await sleep(450);
+            assertTask(id);
 
-        if (containerSlots < 15) {
-            await closeInventory();
-
-            throw new Error(
-                'Unexpected donkey inventory layout'
+            await bot.lookAt(
+                donkey.position.offset(0, 0.8, 0),
+                true
             );
-        }
+            assertTask(id);
 
-        uiLog('[CHEST] Donkey inventory opened!', 'status');
+            uiLog('[CHEST] Sneak held. Requesting donkey inventory...', 'sys');
 
-        return window;
+            let timeoutHandle;
 
-    } catch (error) {
-        waiter.cancel();
+            const timeoutPromise = new Promise((_, reject) => {
+                timeoutHandle = setTimeout(() => {
+                    reject(new Error(
+                        `Donkey inventory did not open within ${CONFIG.windowTimeout / 1000}s`
+                    ));
+                }, CONFIG.windowTimeout);
+            });
 
-        throw error;
+            let window;
 
-    } finally {
-        if (bot) {
             try {
-                bot.setControlState('sneak', false);
-            } catch (_) {}
+                window = await Promise.race([
+                    bot.openEntity(donkey),
+                    timeoutPromise
+                ]);
+            } finally {
+                clearTimeout(timeoutHandle);
+            }
+
+            assertTask(id);
+
+            // If the open event arrived at the timeout boundary, use the
+            // current window rather than sending another interaction.
+            if ((!window || !Array.isArray(window.slots)) &&
+                bot.currentWindow &&
+                Array.isArray(bot.currentWindow.slots)) {
+                window = bot.currentWindow;
+            }
+
+            if (!window || !Array.isArray(window.slots)) {
+                throw new Error('Entity interaction returned no inventory window');
+            }
+
+            activeWindow = window;
+
+            const containerSlots =
+                Number.isInteger(window.inventoryStart)
+                    ? window.inventoryStart
+                    : window.slots.length - 36;
+
+            if (containerSlots < 15) {
+                await closeInventory();
+                throw new Error(
+                    `Unexpected inventory layout (${window.slots.length} slots)`
+                );
+            }
+
+            uiLog(
+                `[CHEST] Donkey inventory opened on attempt ${attempt}. Container slots: ${containerSlots}`,
+                'status'
+            );
+
+            return window;
+
+        } catch (error) {
+            lastError = error;
+
+            if (id !== taskGeneration || !connected) {
+                throw error;
+            }
+
+            // If the server opened the window just as the timeout fired,
+            // accept it rather than retrying and interacting twice.
+            if (bot.currentWindow && Array.isArray(bot.currentWindow.slots)) {
+                const window = bot.currentWindow;
+                const containerSlots =
+                    Number.isInteger(window.inventoryStart)
+                        ? window.inventoryStart
+                        : window.slots.length - 36;
+
+                if (containerSlots >= 15) {
+                    activeWindow = window;
+                    uiLog('[CHEST] Inventory arrived just after timeout; continuing.', 'status');
+                    return window;
+                }
+            }
+
+            uiLog(
+                `[CHEST] Attempt ${attempt} failed: ${error.message}`,
+                'err'
+            );
+
+            if (attempt < CONFIG.interactionAttempts) {
+                try {
+                    bot.setControlState('sneak', false);
+                } catch (_) {}
+
+                await sleep(CONFIG.interactionRetryDelay);
+            }
+        } finally {
+            if (bot) {
+                try {
+                    bot.setControlState('sneak', false);
+                } catch (_) {}
+            }
         }
     }
+
+    throw new Error(
+        `Could not open donkey inventory after ${CONFIG.interactionAttempts} attempts: ${lastError ? lastError.message : 'unknown error'}`
+    );
 }
 
 // =====================================================
