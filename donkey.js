@@ -382,7 +382,7 @@ async function openDonkeyChest(donkey, id) {
         throw new Error('Move closer to donkey first');
     }
 
-    uiLog('[CHEST] Preparing donkey inventory interaction...', 'sys');
+    uiLog('[CHEST] Preparing sneak interaction...', 'sys');
 
     let lastError = null;
 
@@ -393,17 +393,65 @@ async function openDonkeyChest(donkey, id) {
             throw new Error('Donkey disappeared before interaction');
         }
 
-        uiLog(
-            `[CHEST] Interaction attempt ${attempt}/${CONFIG.interactionAttempts}`,
-            'sys'
-        );
+        let openedWindow = null;
+        let windowHandler = null;
+        let timeoutHandle = null;
+        let secondClickTimer = null;
+        let resolveWindow;
+        let rejectWindow;
+        let settled = false;
+
+        const windowPromise = new Promise((resolve, reject) => {
+            resolveWindow = resolve;
+            rejectWindow = reject;
+        });
+
+        const cleanup = () => {
+            if (timeoutHandle) clearTimeout(timeoutHandle);
+            if (secondClickTimer) clearTimeout(secondClickTimer);
+            if (bot && windowHandler) {
+                bot.removeListener('windowOpen', windowHandler);
+            }
+        };
+
+        const finish = (error, window) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+
+            if (error) rejectWindow(error);
+            else {
+                openedWindow = window;
+                resolveWindow(window);
+            }
+        };
+
+        windowHandler = window => {
+            // Only accept a real container-style window, not a transient
+            // unrelated window.
+            if (window && Array.isArray(window.slots) && window.slots.length >= 45) {
+                finish(null, window);
+            }
+        };
+
+        bot.on('windowOpen', windowHandler);
+
+        timeoutHandle = setTimeout(() => {
+            finish(new Error(
+                `Donkey inventory did not open within ${CONFIG.windowTimeout / 1000}s`
+            ));
+        }, CONFIG.windowTimeout);
 
         try {
-            // Keep sneak held for the entire interaction attempt.
-            // openEntity is Mineflayer's inventory-entity API; activateEntity
-            // is only a generic entity interaction and does not return a window.
+            uiLog(
+                `[CHEST] Attempt ${attempt}/${CONFIG.interactionAttempts}: holding sneak`,
+                'sys'
+            );
+
+            // Start sneaking before the interaction and keep it held until
+            // the donkey inventory's windowOpen event is received.
             bot.setControlState('sneak', true);
-            await sleep(450);
+            await sleep(500);
             assertTask(id);
 
             await bot.lookAt(
@@ -412,42 +460,25 @@ async function openDonkeyChest(donkey, id) {
             );
             assertTask(id);
 
-            uiLog('[CHEST] Sneak held. Requesting donkey inventory...', 'sys');
+            uiLog('[CHEST] Right-click 1/2...', 'sys');
+            bot.activateEntity(donkey);
 
-            let timeoutHandle;
+            // Send the second right-click only if the first one has not
+            // opened the inventory. This avoids clicking again after the
+            // GUI is already open.
+            secondClickTimer = setTimeout(() => {
+                if (settled || id !== taskGeneration || !connected) return;
 
-            const timeoutPromise = new Promise((_, reject) => {
-                timeoutHandle = setTimeout(() => {
-                    reject(new Error(
-                        `Donkey inventory did not open within ${CONFIG.windowTimeout / 1000}s`
-                    ));
-                }, CONFIG.windowTimeout);
-            });
+                try {
+                    uiLog('[CHEST] Inventory not open yet; right-click 2/2...', 'sys');
+                    bot.activateEntity(donkey);
+                } catch (error) {
+                    finish(error);
+                }
+            }, 900);
 
-            let window;
-
-            try {
-                window = await Promise.race([
-                    bot.openEntity(donkey),
-                    timeoutPromise
-                ]);
-            } finally {
-                clearTimeout(timeoutHandle);
-            }
-
+            const window = await windowPromise;
             assertTask(id);
-
-            // If the open event arrived at the timeout boundary, use the
-            // current window rather than sending another interaction.
-            if ((!window || !Array.isArray(window.slots)) &&
-                bot.currentWindow &&
-                Array.isArray(bot.currentWindow.slots)) {
-                window = bot.currentWindow;
-            }
-
-            if (!window || !Array.isArray(window.slots)) {
-                throw new Error('Entity interaction returned no inventory window');
-            }
 
             activeWindow = window;
 
@@ -459,12 +490,12 @@ async function openDonkeyChest(donkey, id) {
             if (containerSlots < 15) {
                 await closeInventory();
                 throw new Error(
-                    `Unexpected inventory layout (${window.slots.length} slots)`
+                    `Unexpected donkey inventory layout (${window.slots.length} slots)`
                 );
             }
 
             uiLog(
-                `[CHEST] Donkey inventory opened on attempt ${attempt}. Container slots: ${containerSlots}`,
+                `[CHEST] Donkey inventory opened. Sneak can now be released. Container slots: ${containerSlots}`,
                 'status'
             );
 
@@ -472,25 +503,19 @@ async function openDonkeyChest(donkey, id) {
 
         } catch (error) {
             lastError = error;
+            cleanup();
 
             if (id !== taskGeneration || !connected) {
                 throw error;
             }
 
-            // If the server opened the window just as the timeout fired,
-            // accept it rather than retrying and interacting twice.
-            if (bot.currentWindow && Array.isArray(bot.currentWindow.slots)) {
-                const window = bot.currentWindow;
-                const containerSlots =
-                    Number.isInteger(window.inventoryStart)
-                        ? window.inventoryStart
-                        : window.slots.length - 36;
-
-                if (containerSlots >= 15) {
-                    activeWindow = window;
-                    uiLog('[CHEST] Inventory arrived just after timeout; continuing.', 'status');
-                    return window;
-                }
+            // A window can arrive at the timeout boundary. Prefer the
+            // already-open window over another interaction attempt.
+            const current = bot.currentWindow;
+            if (current && Array.isArray(current.slots) && current.slots.length >= 45) {
+                activeWindow = current;
+                uiLog('[CHEST] Inventory detected after timeout; continuing.', 'status');
+                return current;
             }
 
             uiLog(
@@ -499,13 +524,13 @@ async function openDonkeyChest(donkey, id) {
             );
 
             if (attempt < CONFIG.interactionAttempts) {
-                try {
-                    bot.setControlState('sneak', false);
-                } catch (_) {}
-
                 await sleep(CONFIG.interactionRetryDelay);
             }
         } finally {
+            cleanup();
+
+            // Release sneak only after the window has opened or this attempt
+            // has failed. Releasing sneak does not call closeWindow.
             if (bot) {
                 try {
                     bot.setControlState('sneak', false);
