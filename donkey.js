@@ -34,7 +34,7 @@ const CONFIG = {
     interactionDistance: 3,
 
     // Set MC_LOGIN_COMMAND in your shell; keep credentials out of this file.
-    loginCommand: process.env.MC_LOGIN_COMMAND || '',
+    loginCommand: '/login reaper_bot_dont_test_me',
 
     reconnectDelay: 15000,
     windowTimeout: 7000,
