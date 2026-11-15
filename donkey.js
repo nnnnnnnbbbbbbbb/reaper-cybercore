@@ -382,7 +382,7 @@ async function openDonkeyChest(donkey, id) {
         throw new Error('Move closer to donkey first');
     }
 
-    uiLog('[CHEST] Preparing sneak + left-click interaction...', 'sys');
+    uiLog('[CHEST] Preparing sneak + RIGHT-CLICK interaction...', 'sys');
 
     let lastError = null;
 
@@ -436,11 +436,11 @@ async function openDonkeyChest(donkey, id) {
 
         try {
             uiLog(
-                `[CHEST] Attempt ${attempt}/${CONFIG.interactionAttempts}: enabling sneak`,
+                `[CHEST] Attempt ${attempt}/${CONFIG.interactionAttempts}: holding sneak`,
                 'sys'
             );
 
-            // User-confirmed server interaction: hold sneak, then left-click.
+            // Chest-equipped donkey interaction: hold sneak, then RIGHT-CLICK.
             bot.setControlState('sneak', true);
             await sleep(500);
             assertTask(id);
@@ -451,11 +451,11 @@ async function openDonkeyChest(donkey, id) {
             );
             assertTask(id);
 
-            uiLog('[CHEST] Sneak held. LEFT-CLICKING donkey...', 'sys');
+            uiLog('[CHEST] Sneak held. RIGHT-CLICKING donkey once...', 'sys');
 
-            // Mineflayer attack() sends the left-click/attack interaction.
-            // The target server is expected to handle this as the donkey GUI action.
-            bot.attack(donkey);
+            // activateEntity sends the normal right-click/interact packet.
+            // Do not use attack(): that sends a left-click attack.
+            bot.activateEntity(donkey);
 
             const window = await windowPromise;
             assertTask(id);
@@ -483,7 +483,7 @@ async function openDonkeyChest(donkey, id) {
                 'status'
             );
 
-            // Release shift only after the server opens the donkey GUI.
+            // Release sneak only after the inventory opens; do not close GUI.
             bot.setControlState('sneak', false);
 
             return window;
