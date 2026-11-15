@@ -382,7 +382,7 @@ async function openDonkeyChest(donkey, id) {
         throw new Error('Move closer to donkey first');
     }
 
-    uiLog('[CHEST] Preparing sneak + inventory interaction...', 'sys');
+    uiLog('[CHEST] Preparing sneak + left-click interaction...', 'sys');
 
     let lastError = null;
 
@@ -393,15 +393,54 @@ async function openDonkeyChest(donkey, id) {
             throw new Error('Donkey disappeared before interaction');
         }
 
-        uiLog(
-            `[CHEST] Attempt ${attempt}/${CONFIG.interactionAttempts}: sneak on`,
-            'sys'
-        );
+        let windowHandler = null;
+        let timeoutHandle = null;
+        let resolveWindow;
+        let rejectWindow;
+        let settled = false;
+
+        const windowPromise = new Promise((resolve, reject) => {
+            resolveWindow = resolve;
+            rejectWindow = reject;
+        });
+
+        const cleanup = () => {
+            if (timeoutHandle) clearTimeout(timeoutHandle);
+            if (bot && windowHandler) {
+                bot.removeListener('windowOpen', windowHandler);
+            }
+        };
+
+        const finish = (error, window) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+
+            if (error) rejectWindow(error);
+            else resolveWindow(window);
+        };
+
+        windowHandler = window => {
+            if (window && Array.isArray(window.slots) && window.slots.length >= 45) {
+                finish(null, window);
+            }
+        };
+
+        bot.on('windowOpen', windowHandler);
+
+        timeoutHandle = setTimeout(() => {
+            finish(new Error(
+                `Donkey inventory did not open within ${CONFIG.windowTimeout / 1000}s`
+            ));
+        }, CONFIG.windowTimeout);
 
         try {
-            // Hold sneak before opening the donkey's inventory. Mineflayer's
-            // openEntity sends the correct entity interaction and resolves
-            // with the actual inventory window when the server opens it.
+            uiLog(
+                `[CHEST] Attempt ${attempt}/${CONFIG.interactionAttempts}: enabling sneak`,
+                'sys'
+            );
+
+            // User-confirmed server interaction: hold sneak, then left-click.
             bot.setControlState('sneak', true);
             await sleep(500);
             assertTask(id);
@@ -412,30 +451,17 @@ async function openDonkeyChest(donkey, id) {
             );
             assertTask(id);
 
-            uiLog('[CHEST] Sneak held. Calling bot.openEntity(donkey)...', 'sys');
+            uiLog('[CHEST] Sneak held. LEFT-CLICKING donkey...', 'sys');
 
-            let timeoutHandle;
-            let window;
+            // Mineflayer attack() sends the left-click/attack interaction.
+            // The target server is expected to handle this as the donkey GUI action.
+            bot.attack(donkey);
 
-            try {
-                window = await Promise.race([
-                    bot.openEntity(donkey),
-                    new Promise((_, reject) => {
-                        timeoutHandle = setTimeout(() => {
-                            reject(new Error(
-                                `Donkey inventory did not open within ${CONFIG.windowTimeout / 1000}s`
-                            ));
-                        }, CONFIG.windowTimeout);
-                    })
-                ]);
-            } finally {
-                clearTimeout(timeoutHandle);
-            }
-
+            const window = await windowPromise;
             assertTask(id);
 
             if (!window || !Array.isArray(window.slots)) {
-                throw new Error('Mineflayer returned no valid donkey inventory window');
+                throw new Error('No valid donkey inventory window received');
             }
 
             activeWindow = window;
@@ -453,11 +479,11 @@ async function openDonkeyChest(donkey, id) {
             }
 
             uiLog(
-                `[CHEST] Donkey inventory opened. Slots: ${containerSlots}. Releasing sneak without closing GUI.`,
+                `[CHEST] Donkey inventory opened. Releasing sneak; GUI stays open. Container slots: ${containerSlots}`,
                 'status'
             );
 
-            // Release the sneak key only. Do not close the inventory window.
+            // Release shift only after the server opens the donkey GUI.
             bot.setControlState('sneak', false);
 
             return window;
@@ -482,6 +508,8 @@ async function openDonkeyChest(donkey, id) {
                 await sleep(CONFIG.interactionRetryDelay);
             }
         } finally {
+            cleanup();
+
             if (bot) {
                 try {
                     bot.setControlState('sneak', false);
