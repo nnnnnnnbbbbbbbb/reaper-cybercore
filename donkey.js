@@ -453,9 +453,14 @@ async function openDonkeyChest(donkey, id) {
 
             uiLog('[CHEST] Sneak held. RIGHT-CLICKING donkey once...', 'sys');
 
-            // activateEntity sends the normal right-click/interact packet.
-            // Do not use attack(): that sends a left-click attack.
-            bot.activateEntity(donkey);
+            // Send the protocol's explicit INTERACT action (mouse: 0).
+            // mouse: 1 is ATTACK / left-click, so it is deliberately never used.
+            // Keep sneak enabled in the packet for chest-equipped donkey access.
+            bot._client.write('use_entity', {
+                target: donkey.id,
+                mouse: 0,
+                sneaking: true
+            });
 
             const window = await windowPromise;
             assertTask(id);
