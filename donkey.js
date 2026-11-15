@@ -33,7 +33,9 @@ const CONFIG = {
     searchDistance: 64,
     interactionDistance: 3,
 
-    loginCommand: '',
+    // Set MC_LOGIN_COMMAND in your shell, e.g. /login your-password
+    // The credential is not stored in this source file.
+    loginCommand: process.env.MC_LOGIN_COMMAND || '',
 
     reconnectDelay: 15000,
     windowTimeout: 7000,
@@ -851,38 +853,43 @@ function createBotInstance() {
             uiLog('[PROXY] Transition message received.', 'sys');
         }
 
+        const lowerMessage = clean.toLowerCase();
+
         if (
             !isShiftingServers &&
             !loginDispatched &&
             (
-                clean.includes('/login') ||
-                clean.includes('session has been continued')
+                lowerMessage.includes('/login') ||
+                lowerMessage.includes('session has been continued')
             )
         ) {
+            loginDispatched = true;
+
             if (!CONFIG.loginCommand) {
                 uiLog(
-                    '[LOGIN] Configure loginCommand locally if required.',
-                    'sys'
+                    '[LOGIN] Login prompt detected, but MC_LOGIN_COMMAND is not set.',
+                    'err'
                 );
                 return;
             }
 
-            loginDispatched = true;
-
-            uiLog('[LOGIN] Authentication requested.', 'sys');
+            uiLog('[LOGIN] Login prompt detected. Waiting 5 seconds...', 'sys');
 
             clearTimeout(loginTimer);
 
             loginTimer = setTimeout(() => {
                 if (
                     bot === thisBot &&
+                    thisBot._client &&
                     thisBot._client.state === 'play' &&
                     !isShiftingServers
                 ) {
                     thisBot.chat(CONFIG.loginCommand);
-                    uiLog('[LOGIN] Login command sent.', 'sys');
+                    uiLog('[LOGIN] Login command sent after 5 seconds.', 'sys');
+                } else {
+                    uiLog('[LOGIN] Skipped: bot is no longer in the play state.', 'err');
                 }
-            }, 3500);
+            }, 5000);
         }
     });
 
@@ -990,11 +997,503 @@ app.get('/', (req, res) => {
 <title>8b8t Donkey Manager</title>
 
 <style>
-* {
-    box-sizing: border-box;
+* {    box-sizing: border-box;
 }
 
 body {
     background: #0c0f12;
     color: #a5acb6;
     font-family: 'Courier New', monospace;
+    margin: 20px;
+}
+
+h2 {
+    color: #52a3ff;
+}
+
+.panel {
+    background: #10151c;
+    border: 1px solid #1a222d;
+    padding: 16px;
+    margin-bottom: 15px;
+    border-radius: 6px;
+}
+
+.status {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+#connection {
+    color: #db4437;
+    font-weight: bold;
+}
+
+#task {
+    color: #52a3ff;
+    margin-top: 7px;
+}
+
+.telemetry {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+.metric {
+    background: #14191f;
+    padding: 12px;
+    border-radius: 4px;
+    min-width: 0;
+}
+
+.metric small {
+    color: #6272a4;
+}
+
+.metric strong {
+    display: block;
+    color: white;
+    margin-top: 7px;
+    overflow-wrap: anywhere;
+}
+
+.buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+button {
+    border: none;
+    padding: 15px 10px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+button:disabled {
+    opacity: .4;
+    cursor: not-allowed;
+}
+
+button:hover:not(:disabled) {
+    filter: brightness(1.2);
+}
+
+.deposit {
+    background: #0f9d58;
+    color: white;
+}
+
+.withdraw {
+    background: #4285f4;
+    color: white;
+}
+
+.navigate {
+    background: #7952b3;
+    color: white;
+}
+
+.stop {
+    background: #db4437;
+    color: white;
+    grid-column: span 2;
+    padding: 19px;
+}
+
+.start {
+    background: #45556c;
+    color: white;
+    width: 100%;
+    margin-top: 10px;
+}
+
+#console {
+    background: #050709;
+    border: 1px solid #1a222d;
+    padding: 15px;
+    height: 350px;
+    overflow-y: auto;
+    border-radius: 5px;
+    overflow-wrap: anywhere;
+}
+
+.log {
+    margin: 4px 0;
+    line-height: 1.4;
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+
+.sys {
+    color: #f4b400;
+}
+
+.srv {
+    color: #a5acb6;
+}
+
+.log.status {
+    color: #0f9d58;
+}
+
+.err {
+    color: #db4437;
+}
+
+#input-container {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+input {
+    flex: 1;
+    min-width: 0;
+    background: #14191f;
+    border: 1px solid #2c384c;
+    color: white;
+    padding: 12px;
+    font-family: inherit;
+}
+
+#sendBtn {
+    background: #52a3ff;
+    color: #0c0f12;
+}
+
+@media(max-width: 500px) {
+    body {
+        margin: 10px;
+    }
+
+    .buttons {
+        grid-template-columns: 1fr;
+    }
+
+    .stop {
+        grid-column: span 1;
+    }
+
+    .telemetry {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<h2>🤖 8b8t DONKEY MANAGER</h2>
+
+<p>Mineflayer Automation | deadly_boxer</p>
+
+<div class="panel status">
+    <div>
+        <strong>BOT STATUS</strong>
+        <div id="task">Disconnected</div>
+    </div>
+
+    <div id="connection">DISCONNECTED</div>
+</div>
+
+<div class="panel">
+    <h3>Bot Telemetry</h3>
+
+    <div class="telemetry">
+        <div class="metric">
+            <small>Health</small>
+            <strong id="health">--</strong>
+        </div>
+
+        <div class="metric">
+            <small>Hunger</small>
+            <strong id="food">--</strong>
+        </div>
+
+        <div class="metric">
+            <small>Coordinates</small>
+            <strong id="position">--</strong>
+        </div>
+    </div>
+</div>
+
+<div class="panel">
+    <h3>Donkey Operations</h3>
+
+    <div class="buttons">
+
+        <button class="deposit" id="deposit" disabled>
+            ↓ DEPOSIT SHULKERS
+        </button>
+
+        <button class="withdraw" id="withdraw" disabled>
+            ↑ WITHDRAW SHULKERS
+        </button>
+
+        <button class="navigate" id="navigate" disabled>
+            ◉ GO NEAR DONKEY
+        </button>
+
+        <button class="stop" id="stop" disabled>
+            ■ FORCE STOP ALL TASKS
+        </button>
+
+    </div>
+
+    <button class="start" id="start">
+        RECONNECT BOT
+    </button>
+</div>
+
+<div class="panel">
+    <h3>Live Console</h3>
+
+    <div id="console"></div>
+
+    <div id="input-container">
+        <input
+            type="text"
+            id="cmdInput"
+            placeholder="Send chat message or server command..."
+            autocomplete="off"
+        >
+
+        <button id="sendBtn">EXECUTE</button>
+    </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+const socket = io();
+
+const consoleDiv = document.getElementById('console');
+const input = document.getElementById('cmdInput');
+
+function addLog(data) {
+    const line = document.createElement('div');
+
+    line.className = 'log ' + data.type;
+    line.textContent =
+        (data.time ? '[' + data.time + '] ' : '') +
+        data.text;
+
+    consoleDiv.appendChild(line);
+
+    while (consoleDiv.children.length > 500) {
+        consoleDiv.firstChild.remove();
+    }
+
+    consoleDiv.scrollTop = consoleDiv.scrollHeight;
+}
+
+socket.on('botLog', addLog);
+
+socket.on('botStatus', data => {
+    const connection = document.getElementById('connection');
+
+    connection.textContent = data.connected
+        ? 'CONNECTED'
+        : 'DISCONNECTED';
+
+    connection.style.color = data.connected
+        ? '#0f9d58'
+        : '#db4437';
+
+    document.getElementById('task').textContent =
+        data.task || 'Idle';
+
+    const disabled = !data.connected || data.busy;
+
+    document.getElementById('deposit').disabled = disabled;
+    document.getElementById('withdraw').disabled = disabled;
+    document.getElementById('navigate').disabled = disabled;
+
+    document.getElementById('stop').disabled =
+        !data.connected || !data.busy;
+});
+
+socket.on('telemetry', data => {
+    document.getElementById('health').textContent =
+        data.health ?? '--';
+
+    document.getElementById('food').textContent =
+        data.food ?? '--';
+
+    if (data.position) {
+        const p = data.position;
+
+        document.getElementById('position').textContent =
+            p.x + ', ' + p.y + ', ' + p.z;
+    }
+});
+
+// Button events
+
+document.getElementById('deposit').onclick = () => {
+    socket.emit('deposit');
+};
+
+document.getElementById('withdraw').onclick = () => {
+    socket.emit('withdraw');
+};
+
+document.getElementById('navigate').onclick = () => {
+    socket.emit('goNear');
+};
+
+document.getElementById('stop').onclick = () => {
+    socket.emit('forceStop');
+};
+
+document.getElementById('start').onclick = () => {
+    socket.emit('startBot');
+};
+
+// Chat input
+
+function transmitInput() {
+    const value = input.value.trim();
+
+    if (!value) return;
+
+    socket.emit('uiCommand', value);
+
+    input.value = '';
+}
+
+document.getElementById('sendBtn').onclick =
+    transmitInput;
+
+input.addEventListener('keydown', event => {
+    if (event.key === 'Enter') {
+        transmitInput();
+    }
+});
+
+</script>
+
+</body>
+</html>`);
+});
+
+// =====================================================
+// SOCKET EVENTS
+// =====================================================
+
+io.on('connection', socket => {
+    socket.emit('botStatus', {
+        connected,
+        busy,
+        task: currentTask
+    });
+
+    socket.on('deposit', depositOperation);
+
+    socket.on('withdraw', withdrawOperation);
+
+    socket.on('goNear', goNearDonkey);
+
+    socket.on('forceStop', forceStop);
+
+    socket.on('startBot', () => {
+        manualStop = false;
+
+        if (!bot) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+
+            createBotInstance();
+        }
+    });
+
+    socket.on('uiCommand', text => {
+        if (
+            typeof text !== 'string' ||
+            text.length > 256 ||
+            !text.trim()
+        ) return;
+
+        if (
+            bot &&
+            connected &&
+            bot._client.state === 'play' &&
+            !isShiftingServers
+        ) {
+            bot.chat(text);
+
+            // Do not echo authentication commands into dashboard logs.
+            if (!/^\/login(?:\s|$)/i.test(text)) {
+                uiLog(`[SENT CHAT] ${text}`, 'sys');
+            } else {
+                uiLog('[SENT CHAT] Authentication command sent.', 'sys');
+            }
+        } else {
+            uiLog('[CHAT] Bot is not ready.', 'err');
+        }
+    });
+
+    socket.on('stopBot', async () => {
+        manualStop = true;
+
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+
+        await forceStop();
+
+        if (bot) {
+            bot.quit('Stopped from dashboard');
+        }
+    });
+});
+
+// =====================================================
+// START APPLICATION
+// =====================================================
+
+server.listen(CONFIG.webPort, '127.0.0.1', () => {
+    if (serverStarted) return;
+
+    serverStarted = true;
+
+    console.log('');
+    console.log('==========================================');
+    console.log('        8b8t DONKEY MANAGER');
+    console.log('==========================================');
+    console.log(`Dashboard: http://127.0.0.1:${CONFIG.webPort}`);
+    console.log('==========================================');
+    console.log('');
+
+    createBotInstance();
+});
+
+// =====================================================
+// PROCESS CLEANUP
+// =====================================================
+
+process.on('SIGINT', async () => {
+    console.log('\nShutting down...');
+
+    manualStop = true;
+
+    clearTimeout(reconnectTimer);
+    clearTimeout(loginTimer);
+
+    await forceStop();
+
+    if (bot) {
+        try {
+            bot.quit('Application shutdown');
+        } catch (_) {}
+    }
+
+    server.close(() => process.exit(0));
+
+    setTimeout(() => process.exit(0), 3000).unref();
+});
