@@ -403,7 +403,7 @@ async function runDonkeyChestTask(mode) {
 
       fallbackTimer = setTimeout(() => {
         if (!abortFlag && !bot.currentWindow && !settled) {
-          uiLog('[Donkey] Retrying interaction...', 'sys);
+          uiLog('[Donkey] Retrying interaction...', 'sys');
           setServerSneak(true);
 
           try {
