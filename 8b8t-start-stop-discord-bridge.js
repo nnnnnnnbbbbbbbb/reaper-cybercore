@@ -249,7 +249,8 @@ function createBotInstance() {
     const detail = typeof reason === 'string' ? reason : JSON.stringify(reason);
     log('[Kicked] ' + detail, 'err');
     queueDiscord('🔴 Bot was kicked: ' + detail);
-    // Mineflayer emits end for a completed kick; socket close is a fallback.
+    // Treat the kick itself as a disconnect; end/socket events are deduplicated.
+    handleDisconnect(detail, 'Kicked');
   });
   currentBot.on('end', reason => handleDisconnect(reason, 'Minecraft end'));
 }
