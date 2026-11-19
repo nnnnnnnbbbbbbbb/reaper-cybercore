@@ -45,8 +45,8 @@ button:disabled{opacity:.45;cursor:not-allowed}#status{font-weight:bold;color:#f
 @media(max-width:500px){body{margin:10px}#input-container{flex-direction:column}}
 </style></head><body>
 <h2>🤖 8b8t Bot Console — ${MC_CONFIG.username}</h2>
-<p>Start or stop the Minecraft connection. Unexpected kicks, socket closes and disconnects trigger automatic reconnects while running.</p>
-<div id="controls"><button id="startBtn">Start Bot</button><button id="stopBtn" disabled>Stop Bot</button><span id="status">● STOPPED</span></div>
+<p>The bot starts automatically with this application. Unexpected kicks, socket closes and disconnects trigger automatic reconnects. Use Stop only when you want to pause it manually.</p>
+<div id="controls"><button id="startBtn">Start Bot</button><button id="stopBtn" disabled>Stop Bot</button><span id="status">● STARTING</span></div>
 <div id="console"></div>
 <div id="input-container"><input id="cmdInput" placeholder="Send Minecraft chat or command..." autocomplete="off"><button id="sendBtn">Execute</button></div>
 <script src="/socket.io/socket.io.js"></script><script>
@@ -308,7 +308,12 @@ io.on('connection', socket => {
 
 server.listen(PORT, () => {
   log(`[Web Server] Dashboard available at http://localhost:${PORT}`, 'status');
-  log('[System] Dashboard ready. Press Start Bot to connect.', 'sys');
+  // Automatically connect whenever the Node.js application starts.
+  // The dashboard Stop button still provides an intentional manual stop.
+  shouldRun = true;
+  setStatus();
+  log('[System] Application started; automatically starting Minecraft bot.', 'sys');
+  createBotInstance();
 });
 
 if (DISCORD_TOKEN) {
