@@ -31,7 +31,7 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 app.get('/', (_req, res) => {
-  res.send(\`<!doctype html>
+  res.send(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>8b8t Bot Console</title><style>
 *{box-sizing:border-box}body{margin:20px;background:#0c0f12;color:#a5acb6;font:14px 'Courier New',monospace}
@@ -44,7 +44,7 @@ button:disabled{opacity:.45;cursor:not-allowed}#status{font-weight:bold;color:#f
 #input-container{display:flex;gap:10px;margin-top:15px}input{flex:1;min-width:0;background:#14191f;border:1px solid #2c384c;color:white;padding:12px;font:14px 'Courier New';border-radius:4px}
 @media(max-width:500px){body{margin:10px}#input-container{flex-direction:column}}
 </style></head><body>
-<h2>🤖 8b8t Bot Console — \${MC_CONFIG.username}</h2>
+<h2>🤖 8b8t Bot Console — ${MC_CONFIG.username}</h2>
 <p>Start or stop the Minecraft connection. Unexpected kicks, socket closes and disconnects trigger automatic reconnects while running.</p>
 <div id="controls"><button id="startBtn">Start Bot</button><button id="stopBtn" disabled>Stop Bot</button><span id="status">● STOPPED</span></div>
 <div id="console"></div>
@@ -57,7 +57,7 @@ socket.on('botStatus',s=>{status.textContent=s?'● RUNNING / CONNECTING':'● S
 socket.on('botLog',d=>{const e=document.createElement('div');e.className='log '+d.type;e.textContent=d.text;logBox.appendChild(e);logBox.scrollTop=logBox.scrollHeight;});
 function send(){const v=input.value.trim();if(v){socket.emit('uiCommand',v);input.value='';}}
 document.getElementById('sendBtn').onclick=send;input.addEventListener('keydown',e=>{if(e.key==='Enter')send();});
-</script></body></html>\`);
+</script></body></html>`);
 });
 
 let bot = null;
@@ -116,7 +116,7 @@ discordClient.on('messageCreate', message => {
     const body = String(message.content || '').replace(/\s+/g, ' ').trim();
     if (!body) return;
     const name = message.member?.displayName || message.author.globalName || message.author.username;
-    const chat = \`> \${name}: \${body}\`.slice(0, 256);
+    const chat = `> ${name}: ${body}`.slice(0, 256);
     if (bot?._client?.state === 'play' && !isShiftingServers) {
       bot.chat(chat);
       log('[Discord -> MC] ' + chat, 'sys');
@@ -135,8 +135,8 @@ function clearReconnect() {
 function scheduleReconnect(reason = 'connection lost') {
   if (!shouldRun || isShuttingDown || reconnectTimer) return;
   const delay = Math.floor(Math.random() * (RECONNECT_MAX - RECONNECT_MIN + 1)) + RECONNECT_MIN;
-  log(\`[Reconnect] \${reason}. Retrying in \${(delay / 1000).toFixed(1)} seconds...\`, 'sys');
-  queueDiscord(\`⏳ Disconnected. Reconnecting in \${(delay / 1000).toFixed(1)} seconds...\`);
+  log(`[Reconnect] ${reason}. Retrying in ${(delay / 1000).toFixed(1)} seconds...`, 'sys');
+  queueDiscord(`⏳ Disconnected. Reconnecting in ${(delay / 1000).toFixed(1)} seconds...`);
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     if (shouldRun && !isShuttingDown && !bot) createBotInstance();
@@ -152,7 +152,7 @@ function createBotInstance() {
   function handleDisconnect(reason, source) {
     if (disconnectHandled || thisGeneration !== generation) return;
     disconnectHandled = true;
-    log(\`[Disconnect] \${source}: \${reason || 'connection closed'}\`, 'err');
+    log(`[Disconnect] ${source}: ${reason || 'connection closed'}`, 'err');
     if (bot === currentBot) bot = null;
     loginDispatched = false;
     isShiftingServers = false;
@@ -161,7 +161,7 @@ function createBotInstance() {
     if (shouldRun && !isShuttingDown) scheduleReconnect(source);
   }
 
-  log(\`[System] Connecting \${MC_CONFIG.username} to \${MC_CONFIG.host}...\`, 'sys');
+  log(`[System] Connecting ${MC_CONFIG.username} to ${MC_CONFIG.host}...`, 'sys');
   loginDispatched = false;
   isShiftingServers = false;
   isFullyLoaded = false;
@@ -190,7 +190,7 @@ function createBotInstance() {
   currentBot._client?.once('connect', attachSocketClose);
 
   currentBot._client?.on('state', (next, previous) => {
-    log(\`[Protocol State] \${previous} -> \${next}\`, 'sys');
+    log(`[Protocol State] ${previous} -> ${next}`, 'sys');
     if (next === 'configuration') {
       isShiftingServers = true;
       isFullyLoaded = false;
@@ -210,7 +210,7 @@ function createBotInstance() {
     const text = String(message).trim();
     if (!text) return;
     log('[Server] ' + text, 'srv');
-    queueDiscord('\`[8b8t]\` ' + text);
+    queueDiscord('`[8b8t]` ' + text);
 
     if (text.includes('Connecting to 8b8t')) {
       isShiftingServers = true;
@@ -239,8 +239,8 @@ function createBotInstance() {
       isFullyLoaded = true;
       const hp = typeof currentBot.health === 'number' ? currentBot.health.toFixed(1) : 'Unknown';
       const food = typeof currentBot.food === 'number' ? currentBot.food : 'Unknown';
-      log(\`[Status] Connected to 8b8t! HP: \${hp} | Hunger: \${food}\`, 'status');
-      queueDiscord(\`🟢 Connected to 8b8t! HP: \${hp} | Hunger: \${food}\`);
+      log(`[Status] Connected to 8b8t! HP: ${hp} | Hunger: ${food}`, 'status');
+      queueDiscord(`🟢 Connected to 8b8t! HP: ${hp} | Hunger: ${food}`);
     }
   });
 
@@ -306,7 +306,7 @@ io.on('connection', socket => {
 });
 
 server.listen(PORT, () => {
-  log(\`[Web Server] Dashboard available at http://localhost:\${PORT}\`, 'status');
+  log(`[Web Server] Dashboard available at http://localhost:${PORT}`, 'status');
   log('[System] Dashboard ready. Press Start Bot to connect.', 'sys');
 });
 
