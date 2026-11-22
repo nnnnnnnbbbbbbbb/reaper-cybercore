@@ -15,7 +15,7 @@ const MC_HOST = '8b8t.me';
 const MC_PORT = 25565;
 const MC_USERNAME = 'deadly_boxer';
 const MC_VERSION = '1.21.1';
-const LOGIN_PASSWORD = 'reaper_bot_dont_test_me'; // Set this in your environment; do not commit passwords
+const LOGIN_PASSWORD = process.env.MC_LOGIN_PASSWORD || ''; // Set MC_LOGIN_PASSWORD in your environment
 
 // Step Delays
 const LOGIN_DELAY = 2000;       // Wait 2s to login
@@ -109,9 +109,22 @@ async function retrieveShulkerFromChest(activeBot) {
     try {
         addLog(` Opening chest at X:${target.x} Y:${target.y} Z:${target.z}...`);
         container = await activeBot.openContainer(chestBlock);
-        const shulker = container.items().find(item =>
-            item && typeof item.name === 'string' && item.name.includes('shulker_box')
-        );
+        // Search only the chest's own slots, one by one (not the player's inventory).
+        const chestSlotCount = Number.isInteger(container.inventoryStart)
+            ? container.inventoryStart
+            : Math.max(0, container.slots.length - 36);
+        let shulker = null;
+
+        for (let slotIndex = 0; slotIndex < chestSlotCount; slotIndex++) {
+            const item = container.slots[slotIndex];
+            addLog(`Checking chest slot ${slotIndex + 1}/${chestSlotCount}...`);
+
+            if (item && typeof item.name === 'string' && item.name.includes('shulker_box')) {
+                shulker = item;
+                addLog(`Found ${item.name} in chest slot ${slotIndex + 1}.`);
+                break;
+            }
+        }
 
         if (!shulker) {
             addLog(` No shulker found in the chest. Returning to point.`);
