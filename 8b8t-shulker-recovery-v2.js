@@ -14,7 +14,7 @@ const MC_HOST = '8b8t.me';
 const MC_PORT = 25565;
 const MC_USERNAME = 'deadly_boxer';
 const MC_VERSION = '1.21.1';
-const LOGIN_PASSWORD = process.env.MC_LOGIN_PASSWORD || ''; // Set this in your environment; do not commit passwords
+const LOGIN_PASSWORD = 'reaper_bot_dont_test_me'; // Set this in your environment; do not commit passwords
 
 // Step Delays
 const LOGIN_DELAY = 2000;       // Wait 2s to login
