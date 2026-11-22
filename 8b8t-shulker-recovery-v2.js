@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const mineflayer = require('mineflayer');
+const { Vec3 } = require('vec3');
 
 const app = express();
 const server = http.createServer(app);
@@ -27,7 +28,7 @@ const CHEST_POSITION = { x: 10701307, y: 112, z: -297 };
 const CHEST_HOME_WAIT = 5000;
 const CHEST_LOOKUP_TIMEOUT = 15000;
 const POINT_HOME_WAIT = 5000;
-const NORTH_WAIT = 15000;
+const SOUTH_WAIT = 15000;
 
 let bot = null;
 let running = false;
@@ -61,7 +62,7 @@ function updateState(status) {
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-async function returnToPointAndFaceNorth(activeBot) {
+async function returnToPointAndFaceSouth(activeBot) {
     if (!running || bot !== activeBot) return false;
 
     addLog(` Returning to /home point...`);
@@ -69,10 +70,10 @@ async function returnToPointAndFaceNorth(activeBot) {
     await sleep(POINT_HOME_WAIT);
     if (!running || bot !== activeBot) return false;
 
-    // Mineflayer yaw: PI faces North (-Z); pitch 0 is level.
-    await activeBot.look(Math.PI, 0, true);
-    addLog(` Facing North (-Z). Waiting 15 seconds before resuming...`);
-    await sleep(NORTH_WAIT);
+    // Mineflayer yaw: 0 faces South (+Z); pitch 0 is level.
+    await activeBot.look(0, 0, true);
+    addLog(` Facing South (+Z). Waiting 15 seconds before resuming...`);
+    await sleep(SOUTH_WAIT);
     return running && bot === activeBot;
 }
 
@@ -84,7 +85,7 @@ async function retrieveShulkerFromChest(activeBot) {
     await sleep(CHEST_HOME_WAIT);
     if (!running || bot !== activeBot) return false;
 
-    const target = CHEST_POSITION;
+    const target = new Vec3(CHEST_POSITION.x, CHEST_POSITION.y, CHEST_POSITION.z);
     const deadline = Date.now() + CHEST_LOOKUP_TIMEOUT;
     let chestBlock = null;
 
@@ -100,7 +101,7 @@ async function retrieveShulkerFromChest(activeBot) {
     if (!running || bot !== activeBot) return false;
     if (!chestBlock) {
         addLog(`[WARNING] No chest found at X:${target.x} Y:${target.y} Z:${target.z}.`);
-        await returnToPointAndFaceNorth(activeBot);
+        await returnToPointAndFaceSouth(activeBot);
         return false;
     }
 
@@ -115,7 +116,7 @@ async function retrieveShulkerFromChest(activeBot) {
         if (!shulker) {
             addLog(` No shulker found in the chest. Returning to point.`);
             container.close();
-            await returnToPointAndFaceNorth(activeBot);
+            await returnToPointAndFaceSouth(activeBot);
             return false;
         }
 
@@ -125,14 +126,14 @@ async function retrieveShulkerFromChest(activeBot) {
         shulkerInfo = 'Retrieved from chest';
         updateState();
         container.close();
-        await returnToPointAndFaceNorth(activeBot);
+        await returnToPointAndFaceSouth(activeBot);
         return true;
     } catch (err) {
         addLog(`[CHEST RECOVERY ERROR] ${err.message}`);
         try {
             if (container) container.close();
         } catch (_) {}
-        await returnToPointAndFaceNorth(activeBot);
+        await returnToPointAndFaceSouth(activeBot);
         return false;
     }
 }
